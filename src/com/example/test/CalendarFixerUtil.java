@@ -429,18 +429,20 @@ public class CalendarFixerUtil {
 			Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
 			return toastMessage;
 		}
+		
 		Set<Long> ids = accountIDs.keySet();
 		long mailDeploy = getMailDeployTime();
+		HashMap<Long, String> idNamePair = getExistenceGoogleCalendarAccountIDAndNames(context.getContentResolver());
+		
 		for (Long id : ids) {
-			toastMessage += "\n->For account " + id;
+			toastMessage += "\n\n->For account " + idNamePair.get(id);
 			byte status = CalendarFixerUtil.doCheckGoogleAccountCalendarEventStatus(context.getContentResolver(), id);
 			long cal_sync8 = accountIDs.get(id);
-			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
-			sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+			String dateString = getDateString(cal_sync8);
 			if (cal_sync8 > mailDeploy) {
-				toastMessage += "\n->CAL_SYNC8 is " + sdf.format(new Date(cal_sync8)) + ", could meet issue";
+				toastMessage += "\n->CAL_SYNC8 is " + dateString + ", could meet issue";
 			} else {
-				toastMessage += "\n->CAL_SYNC8 is " + sdf.format(new Date(cal_sync8)) + ", should be safe";
+				toastMessage += "\n->CAL_SYNC8 is " + dateString + ", should be safe";
 			}
 			
 			if ((status & CalendarFixerUtil.STATUS_MEET_ISSUE_NO_EVENT) != 0) {
@@ -463,38 +465,62 @@ public class CalendarFixerUtil {
 		return toastMessage;
 	}
 	
-	public static boolean fixGoogleAccountCalendarEventMissing(Context context) {
+	private static String getDateString(long tims) {
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+		sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+		return sdf.format(new Date(tims));
+	}
+	
+	public static String fixGoogleAccountCalendarEventMissing(Context context) {
+		String toastMessage = "Processing";
 		HashMap<Long, Long> accountIDs = getCalendarAccountIDAndSync8(context.getContentResolver());
 		if (accountIDs == null || accountIDs.size() <= 0) {
 			Log.w(TAG, "No Google account's calendar found");
-			return false;
+			toastMessage += "\n->No Google account's calendar found";
+			return toastMessage;
+		} else {
+			toastMessage += "\n->Find Google account";
 		}
 		
 		byte pcSyncStatus = isPCSyncStatusError(context.getContentResolver());
 		if ((pcSyncStatus & CalendarFixerUtil.STATUS_MEET_ISSUE_PC_SYNC) == 0) {
-			Log.w(TAG, "pcSyncStatus is not 0");
-			return false;
+			Log.w(TAG, "PcSync Status is not 0");
+			toastMessage += "\n->PcSync Status is not 0";
+			return toastMessage;
+		} else {
+			toastMessage += "\n->PcSync Status is 0";
 		}
 		
 		long mailDeploy = getMailDeployTime();
 		Set<Long> ids = accountIDs.keySet();
 		
 		HashMap<Long, String> idNamePair = getExistenceGoogleCalendarAccountIDAndNames(context.getContentResolver());
+		
+		
 		for (Long id : ids) {
-			byte status = CalendarFixerUtil.doCheckGoogleAccountCalendarEventStatus(context.getContentResolver(), id);
+			toastMessage += "\n\n->For account " + idNamePair.get(id);
 			long cal_sync8 = accountIDs.get(id);
+			String dateString = getDateString(cal_sync8);
 			if (cal_sync8 < mailDeploy) {
-				Log.w(TAG, String.format("CAL_SYNC8 is %d, should be safe", id, Locale.US));
+				String temp = String.format("CAL_SYNC8 is %s, should be safe", dateString, Locale.US);
+				Log.w(TAG, temp);
+				toastMessage += "\n->" + temp;
 				continue;
+			} else {
+				String temp = String.format("CAL_SYNC8 is %s, which is not ok", dateString, Locale.US);
+				Log.w(TAG, temp);
+				toastMessage += "\n->" + temp;
 			}
 			
+			byte status = CalendarFixerUtil.doCheckGoogleAccountCalendarEventStatus(context.getContentResolver(), id);
 			if ((status & CalendarFixerUtil.STATUS_MEET_ISSUE_NO_EVENT) != 0) {
 				Log.w(TAG, String.format("Account %d meet issue, start fixing", id, Locale.US));
+				toastMessage += "\n->Event is missing, trigger fix";
 				eraseGoogleCalendarSyncStatus(context, idNamePair.get(id), id);
 			}
 		}
 		
-		Toast.makeText(context, "Fix and sync triggered", Toast.LENGTH_SHORT).show();
-		return true;
+		Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
+		return toastMessage;
 	}
 }

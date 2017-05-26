@@ -66,7 +66,8 @@ public class MainActivity extends AppCompatActivity {
         bt3.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-            	CalendarFixerUtil.fixGoogleAccountCalendarEventMissing(MainActivity.this);
+            	String message = CalendarFixerUtil.fixGoogleAccountCalendarEventMissing(MainActivity.this);
+            	((Button)view).setText(message);
             }
         });
         
