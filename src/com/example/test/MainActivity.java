@@ -44,13 +44,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        final TextView text = (TextView) findViewById(R.id.text);
 
         Button bt1 = (Button) findViewById(R.id.bt1);
         bt1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
             	String message = CalendarFixerUtil.detectGoogleAccountCalendarEventMissing(MainActivity.this);
-            	((Button)view).setText(message);
+            	text.setText(message);
             }
         });
         
@@ -67,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View view) {
             	String message = CalendarFixerUtil.fixGoogleAccountCalendarEventMissing(MainActivity.this);
-            	((Button)view).setText(message);
+            	text.setText(message);
             }
         });
         

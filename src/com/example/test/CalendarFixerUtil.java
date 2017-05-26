@@ -460,7 +460,7 @@ public class CalendarFixerUtil {
 				toastMessage += "\n->Google account's Calendar events are still there!";
 			}
 		}
-		Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
+		//Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
 		
 		return toastMessage;
 	}
@@ -475,7 +475,7 @@ public class CalendarFixerUtil {
 		String toastMessage = "Processing";
 		HashMap<Long, Long> accountIDs = getCalendarAccountIDAndSync8(context.getContentResolver());
 		if (accountIDs == null || accountIDs.size() <= 0) {
-			Log.w(TAG, "No Google account's calendar found");
+			Log.w(TAG, "No Google account's calendar found, pass");
 			toastMessage += "\n->No Google account's calendar found";
 			return toastMessage;
 		} else {
@@ -485,7 +485,7 @@ public class CalendarFixerUtil {
 		byte pcSyncStatus = isPCSyncStatusError(context.getContentResolver());
 		if ((pcSyncStatus & CalendarFixerUtil.STATUS_MEET_ISSUE_PC_SYNC) == 0) {
 			Log.w(TAG, "PcSync Status is not 0");
-			toastMessage += "\n->PcSync Status is not 0";
+			toastMessage += "\n->PcSync Status is not 0, pass";
 			return toastMessage;
 		} else {
 			toastMessage += "\n->PcSync Status is 0";
@@ -502,7 +502,7 @@ public class CalendarFixerUtil {
 			long cal_sync8 = accountIDs.get(id);
 			String dateString = getDateString(cal_sync8);
 			if (cal_sync8 < mailDeploy) {
-				String temp = String.format("CAL_SYNC8 is %s, should be safe", dateString, Locale.US);
+				String temp = String.format("CAL_SYNC8 is %s, should be safe, pass", dateString, Locale.US);
 				Log.w(TAG, temp);
 				toastMessage += "\n->" + temp;
 				continue;
@@ -517,10 +517,12 @@ public class CalendarFixerUtil {
 				Log.w(TAG, String.format("Account %d meet issue, start fixing", id, Locale.US));
 				toastMessage += "\n->Event is missing, trigger fix";
 				eraseGoogleCalendarSyncStatus(context, idNamePair.get(id), id);
+			} else {
+				toastMessage += "\n->Event is still there, pass";
 			}
 		}
 		
-		Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
+		//Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
 		return toastMessage;
 	}
 }
