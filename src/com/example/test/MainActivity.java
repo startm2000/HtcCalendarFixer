@@ -32,6 +32,8 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Set;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -47,15 +49,8 @@ public class MainActivity extends AppCompatActivity {
         bt1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-            	CalendarFixerUtil.detectGoogleAccountCalendarEventMissing(MainActivity.this, true);
-            }
-        });
-        
-        Button bt4 = (Button) findViewById(R.id.bt4);
-        bt4.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-            	CalendarFixerUtil.detectGoogleAccountCalendarEventMissing(MainActivity.this, false);
+            	String message = CalendarFixerUtil.detectGoogleAccountCalendarEventMissing(MainActivity.this);
+            	((Button)view).setText(message);
             }
         });
         
@@ -74,22 +69,29 @@ public class MainActivity extends AppCompatActivity {
             	CalendarFixerUtil.fixGoogleAccountCalendarEventMissing(MainActivity.this);
             }
         });
+        
     }
     
     private void makeIssueHappen() {
 		ArrayList<ContentProviderOperation> calendarOperationList = new ArrayList<ContentProviderOperation>();
 		ContentProviderOperation.Builder builder = null;
 		
-		ArrayList<String> accountNames = CalendarFixerUtil.getExistenceGoogleCalendarAccountNames(getContentResolver());
-		if (accountNames == null || accountNames.size() <= 0) {
+		HashMap<Long, String> idNamePair = CalendarFixerUtil.getExistenceGoogleCalendarAccountIDAndNames(getContentResolver());
+		if (idNamePair == null || idNamePair.size() <= 0) {
 			Log.w(TAG, "No Google account's calendar found");
 			Toast.makeText(this, "Failed because there is no Google calendar account.", Toast.LENGTH_SHORT).show();
 			return;
 		}
 
+		Set<Long> names = idNamePair.keySet();
+		String accName = "";
+		for (Long id : names) {
+			accName = idNamePair.get(id);
+			break;
+		}
         Uri.Builder builderu = CalendarContract.Calendars.CONTENT_URI.buildUpon();
         builderu.appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER, "true");
-        builderu.appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, accountNames.get(0));
+        builderu.appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, accName);
         builderu.appendQueryParameter(CalendarContract.EventsEntity.ACCOUNT_TYPE, "com.google");
 
         builder = ContentProviderOperation.newUpdate(builderu.build());
@@ -104,8 +106,8 @@ public class MainActivity extends AppCompatActivity {
         
         Bundle extras = new Bundle();
 		extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
-		for (String accName : accountNames) {
-			android.accounts.Account account = new android.accounts.Account(accName, "com.google");
+		for (Long id : names) {
+			android.accounts.Account account = new android.accounts.Account(idNamePair.get(id), "com.google");
 			//ContentResolver.addStatusChangeListener(mask, callback)
 			ContentResolver.requestSync(account, CalendarContract.AUTHORITY, extras);
 		}

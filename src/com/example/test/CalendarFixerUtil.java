@@ -18,7 +18,9 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
 
 /**
@@ -102,21 +104,24 @@ public class CalendarFixerUtil {
 		return 0;
 	}
 
-	private static ArrayList<Long> getCalendarAccountIDs(ContentResolver resolver, String where) {
-		ArrayList<Long> accountIDs = new ArrayList<>();
+	private static HashMap<Long, Long> getCalendarAccountIDAndSync8(ContentResolver resolver) {
+		HashMap<Long, Long> accountIDs = new HashMap<Long, Long>();
 		Cursor cCalID = null;
 		ContentProviderClient calendarsProvider = null;
+		String where = CalendarContract.Calendars.ACCOUNT_TYPE + "='" + ACCOUNT_TYPE_GOOGLE + "'" + " AND " + CalendarContract.Calendars.IS_PRIMARY + " IS 1";
 		try {
 			calendarsProvider = resolver.acquireUnstableContentProviderClient(CalendarContract.Calendars.CONTENT_URI);
 			if (calendarsProvider != null) {
-				cCalID = calendarsProvider.query(CalendarContract.Calendars.CONTENT_URI, new String[]{CalendarContract.Calendars._ID},
+				cCalID = calendarsProvider.query(CalendarContract.Calendars.CONTENT_URI, new String[]{CalendarContract.Calendars._ID, CalendarContract.Calendars.CAL_SYNC8},
 						where , null, null);
 			}
 			if (cCalID != null && cCalID.moveToFirst()) {
+				int idIndex = cCalID.getColumnIndex(CalendarContract.Calendars._ID);
+				int sync8Index = cCalID.getColumnIndex(CalendarContract.Calendars.CAL_SYNC8);
 				do {
-					long accID = cCalID.getLong(0);
-					if (!accountIDs.contains(accID)) {
-						accountIDs.add(accID);
+					long accID = cCalID.getLong(idIndex);
+					if (!accountIDs.containsKey(accID)) {
+						accountIDs.put(accID, cCalID.getLong(sync8Index));
 					}
 				} while (cCalID.moveToNext());
 			}
@@ -142,7 +147,7 @@ public class CalendarFixerUtil {
 		return accountIDs;
 	}
 	
-	private static ArrayList<Long> getExistenceGoogleCalendarAccountIDs(ContentResolver resolver) {
+	/*private static ArrayList<Long> getExistenceGoogleCalendarAccountIDs(ContentResolver resolver) {
 		return getCalendarAccountIDs(resolver, CalendarContract.Calendars.ACCOUNT_TYPE + "='" + ACCOUNT_TYPE_GOOGLE + "'" + " AND " + CalendarContract.Calendars.IS_PRIMARY + " IS 1");
 	}
 
@@ -168,7 +173,7 @@ public class CalendarFixerUtil {
 			return null;
 		}
 		return inCase;
-	}
+	}*/
 
 	private static long getMailDeployTime() {
 		Calendar calendar = Calendar.getInstance();
@@ -182,17 +187,13 @@ public class CalendarFixerUtil {
 	public static final byte STATUS_NO_GOOGLE = 0x08;
 	public static final byte STATUS_HAVE_UNSYNC_EVENT = 0x10;
 	public static final byte STATUS_HAVE_NEW_EVENT = 0x20;
+	public static final byte STATUS_MEET_ISSUE_CAL_SYNC8 = 0x04;
 
-	private static byte doCheckGoogleAccountCalendarEventStatus(ContentResolver resolver) {
+	private static byte doCheckGoogleAccountCalendarEventStatus(ContentResolver resolver, long accountID) {
 		Cursor cursor = null;
 		ContentProviderClient calendarsProvider = null;
-		ArrayList<Long> accountIDs = getExistenceGoogleCalendarAccountIDs(resolver);
-		if (accountIDs == null || accountIDs.size() <= 0) {
-			Log.w(TAG, "No Google account's calendar found");
-			return 0;
-		}
 
-		String inCase = getWhereClauseForGoogleAccountCalendars(resolver);
+		String inCase = String.format("%s='%d'", CalendarContract.Events.CALENDAR_ID, accountID, Locale.US);
 
 		if (DEBUG) Log.d(TAG, "isGoogleAccountCalendarEventExist, inCase = " + inCase);
 		if (TextUtils.isEmpty(inCase)) {
@@ -261,41 +262,29 @@ public class CalendarFixerUtil {
 		return 0;
 	}
 
-	private static boolean isGoogleAccountCalendarExist(ContentResolver resolver) {
+	/*private static boolean isGoogleAccountCalendarExist(ContentResolver resolver) {
 		ArrayList<Long> accountIDs = getExistenceGoogleCalendarAccountIDs(resolver);
 		return accountIDs != null && accountIDs.size() > 0;
-	}
+	}*/
 
-	public static byte checkGoogleAccountCalendarEventStatus(ContentResolver resolver, boolean byEvent) {
-		boolean hasExchange = isHtcExchangeCalendarAccountExist(resolver);
-		boolean hasGoogle = isGoogleAccountCalendarExist(resolver);
-		if (hasExchange && hasGoogle) {
-			if (byEvent) {
-				return doCheckGoogleAccountCalendarEventStatus(resolver);
-			} else {
-				return isPCSyncStatusError(resolver);
-			}
-			
-		} else {
-			return (byte) ((hasExchange ? 0 : STATUS_NO_EXCHANGE) | (hasGoogle ? 0 : STATUS_NO_GOOGLE));
-		}
-	}
-
-	public static ArrayList<String> getExistenceGoogleCalendarAccountNames(ContentResolver resolver) {
-		ArrayList<String> accountNames = new ArrayList<>();
+	public static HashMap<Long, String> getExistenceGoogleCalendarAccountIDAndNames(ContentResolver resolver) {
+		HashMap<Long, String> accountNames = new HashMap<Long, String>();
 		Cursor cCalID = null;
 		ContentProviderClient calendarsProvider = null;
 		try {
 			calendarsProvider = resolver.acquireUnstableContentProviderClient(CalendarContract.Calendars.CONTENT_URI);
 			if (calendarsProvider != null) {
-				cCalID = calendarsProvider.query(CalendarContract.Calendars.CONTENT_URI, new String[]{CalendarContract.Calendars.ACCOUNT_NAME},
+				cCalID = calendarsProvider.query(CalendarContract.Calendars.CONTENT_URI, new String[]{CalendarContract.Calendars.ACCOUNT_NAME, CalendarContract.Calendars._ID},
 						CalendarContract.Calendars.ACCOUNT_TYPE + "='" + ACCOUNT_TYPE_GOOGLE + "'", null, null);
 			}
 			if (cCalID != null && cCalID.moveToFirst()) {
+				int nameIndex = cCalID.getColumnIndex(CalendarContract.Calendars.ACCOUNT_NAME);
+				int idIndex = cCalID.getColumnIndex(CalendarContract.Calendars._ID);
 				do {
-					String accName = cCalID.getString(0);
-					if (!accountNames.contains(accName)) {
-						accountNames.add(accName);
+					String accName = cCalID.getString(nameIndex);
+					long accID = cCalID.getLong(idIndex);
+					if (!accountNames.containsKey(accID)) {
+						accountNames.put(accID, accName);
 					}
 				} while (cCalID.moveToNext());
 			}
@@ -321,65 +310,190 @@ public class CalendarFixerUtil {
 		return accountNames;
 	}
 
-	public static void eraseGoogleCalendarSyncStatus(Context context) {
+	public static void eraseGoogleCalendarSyncStatus(Context context, String accountName, long accId) {
 
-		ArrayList<String> accountNames = getExistenceGoogleCalendarAccountNames(context.getContentResolver());
-		if (accountNames == null || accountNames.size() <= 0) {
-			Log.w(TAG, "No Google account's calendar found");
-			return;
-		}
-
+		ContentProviderClient calendarsProvider = null;
+		Cursor cursor = null;
 		try {
+			
 			//Delete google account's calendar sync status
 			ArrayList<ContentProviderOperation> calendarOperationList = new ArrayList<ContentProviderOperation>();
 			ContentProviderOperation.Builder builder = null;
+			
+			
+
+			calendarsProvider = context.getContentResolver().acquireUnstableContentProviderClient(CalendarContract.SyncState.CONTENT_URI);
+			if (calendarsProvider != null) {
+				String where = String.format("%1$s='%2$s' AND %3$s='%4$s'", CalendarContract.Calendars.ACCOUNT_TYPE, ACCOUNT_TYPE_GOOGLE, CalendarContract.Calendars.ACCOUNT_NAME, accountName, Locale.US);
+				cursor = calendarsProvider.query(CalendarContract.SyncState.CONTENT_URI, 
+						new String[] {CalendarContract.SyncState.DATA},
+						where, null, null);
+			}
+			
+			if (cursor == null || cursor.getCount() <= 0 || !cursor.moveToFirst()) {
+				Log.w(TAG, "Can't find sync_status!");
+				return;
+			}
+
+			String blob = new String(cursor.getBlob(0));
+			if (blob == null || blob.length() <= 0) {
+				Log.w(TAG, "Find nothing inside sync_status!");
+				return;
+			}
+			
+			String [] sep = blob.split("\"");
+			if (sep == null || sep.length <= 0) {
+				Log.w(TAG, "Find nothing inside sync_status!");
+				return;
+			}
+			
+			StringBuilder stringBuilder = new StringBuilder();
+			
+			for (int i = 0; i < sep.length; i++) {
+				if (!sep[i].contains("@")) {
+					stringBuilder.append(sep[i]);
+				}
+				if (i < sep.length - 1) {
+					stringBuilder.append("\"");
+				}
+			}
+			
+			String valueString = stringBuilder.toString();
+			byte [] value = valueString.getBytes();
 
 			Uri.Builder builderu =  CalendarContract.SyncState.CONTENT_URI.buildUpon();
 			builderu.appendQueryParameter(CalendarContract.Calendars.ACCOUNT_TYPE, ACCOUNT_TYPE_GOOGLE);
-			builderu.appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, accountNames.get(0));
+			builderu.appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, accountName);
 			builderu.appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER, "true");
 
 			builder = ContentProviderOperation.newUpdate(builderu.build());
+			builder.withValue(CalendarContract.SyncState.DATA, value);
+			
 			builder.withSelection(CalendarContract.SyncState.ACCOUNT_TYPE + "=?", new String [] {ACCOUNT_TYPE_GOOGLE});
-			builder.withValue(CalendarContract.SyncState.DATA, null);
 			calendarOperationList.add(builder.build());
-
 			context.getContentResolver().applyBatch(CalendarContract.AUTHORITY, calendarOperationList);
 
 			//Trigger resync
 			Bundle extras = new Bundle();
 			extras.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
-			for (String accName : accountNames) {
-				android.accounts.Account account = new android.accounts.Account(accName, ACCOUNT_TYPE_GOOGLE);
-				ContentResolver.requestSync(account, CalendarContract.AUTHORITY, extras);
-			}
+			
+			android.accounts.Account account = new android.accounts.Account(accountName, ACCOUNT_TYPE_GOOGLE);
+			ContentResolver.requestSync(account, CalendarContract.AUTHORITY, extras);
+			
+			Log.w(TAG, String.format("Erase sync status for account : %d", accId, Locale.US));
+			
 		} catch (Exception e) {
 			e.printStackTrace();
+		} finally {
+			if (null != calendarsProvider) {
+				calendarsProvider.release();
+				calendarsProvider = null;
+			}
+
+			if (null != cursor && !cursor.isClosed()) {
+				cursor.close();
+				cursor = null;
+			}
 		}
 	}
 
-	public static boolean detectGoogleAccountCalendarEventMissing(Context context, boolean byEvent) {
-		byte status = CalendarFixerUtil.checkGoogleAccountCalendarEventStatus(context.getContentResolver(), byEvent);
-		if ((status & CalendarFixerUtil.STATUS_MEET_ISSUE_NO_EVENT) != 0) {
-			String toastMessage = "Confirm that\n1.There is HtcExchange's calendar account\n2.Google account's Calendar events missing!";
-			if ((status & CalendarFixerUtil.STATUS_HAVE_UNSYNC_EVENT) != 0) {
-				toastMessage += "\nThere are also unsynced event(s).";
-			} 
-
-			if ((status & CalendarFixerUtil.STATUS_HAVE_NEW_EVENT) != 0) {
-				toastMessage += "\nThere are also new event(s) after issue happened.";
-			}
-			Toast.makeText(context, toastMessage, Toast.LENGTH_SHORT).show();
-			return true;
-		} else if ((status & CalendarFixerUtil.STATUS_MEET_ISSUE_PC_SYNC) != 0) {
-
-			Toast.makeText(context, "Confirm that\n1.There is HtcExchange's calendar account\n2.PC sync's cal_sync1 is 0", Toast.LENGTH_SHORT).show();
+	public static String detectGoogleAccountCalendarEventMissing(Context context) {
+		
+		String toastMessage = "Confirm that";
+		HashMap<Long, Long> accountIDs = getCalendarAccountIDAndSync8(context.getContentResolver());
+		boolean hasGoogle = accountIDs.size() > 0;
+		boolean hasExchange = isHtcExchangeCalendarAccountExist(context.getContentResolver());
+		byte pcSyncStatus = isPCSyncStatusError(context.getContentResolver());
+		
+		if (!hasExchange) {
+			toastMessage += "\n->There is no HtcExchange's calendar account!";
+		} else {
+			toastMessage += "\n->HtcExchange's calendar account found!";
 		}
-		return false;
+		
+		if (!hasGoogle) {
+			toastMessage += "\n->There is no Google's calendar account!";
+		} else {
+			toastMessage += "\n->Google's calendar account found!";
+		}
+		
+		if ((pcSyncStatus & CalendarFixerUtil.STATUS_MEET_ISSUE_PC_SYNC) != 0) {
+			toastMessage += "\n->PC sync's cal_sync1 is 0";
+		} else {
+			toastMessage += "\n->PC sync's cal_sync1 is not 0";
+		}
+		
+		
+		if (accountIDs == null || accountIDs.size() <= 0) {
+			Log.w(TAG, "No Google account's calendar found");
+			Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
+			return toastMessage;
+		}
+		Set<Long> ids = accountIDs.keySet();
+		long mailDeploy = getMailDeployTime();
+		for (Long id : ids) {
+			toastMessage += "\n->For account " + id;
+			byte status = CalendarFixerUtil.doCheckGoogleAccountCalendarEventStatus(context.getContentResolver(), id);
+			long cal_sync8 = accountIDs.get(id);
+			SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+			sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+			if (cal_sync8 > mailDeploy) {
+				toastMessage += "\n->CAL_SYNC8 is " + sdf.format(new Date(cal_sync8)) + ", could meet issue";
+			} else {
+				toastMessage += "\n->CAL_SYNC8 is " + sdf.format(new Date(cal_sync8)) + ", should be safe";
+			}
+			
+			if ((status & CalendarFixerUtil.STATUS_MEET_ISSUE_NO_EVENT) != 0) {
+				
+				toastMessage += "\n->Google account's Calendar events missing!";
+				
+				if ((status & CalendarFixerUtil.STATUS_HAVE_UNSYNC_EVENT) != 0) {
+					toastMessage += "\n->There are also unsynced event(s).";
+				} 
+	
+				if ((status & CalendarFixerUtil.STATUS_HAVE_NEW_EVENT) != 0) {
+					toastMessage += "\n->There are also new event(s) after issue happened.";
+				}
+			} else {
+				toastMessage += "\n->Google account's Calendar events are still there!";
+			}
+		}
+		Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
+		
+		return toastMessage;
 	}
 	
 	public static boolean fixGoogleAccountCalendarEventMissing(Context context) {
-		CalendarFixerUtil.eraseGoogleCalendarSyncStatus(context);
+		HashMap<Long, Long> accountIDs = getCalendarAccountIDAndSync8(context.getContentResolver());
+		if (accountIDs == null || accountIDs.size() <= 0) {
+			Log.w(TAG, "No Google account's calendar found");
+			return false;
+		}
+		
+		byte pcSyncStatus = isPCSyncStatusError(context.getContentResolver());
+		if ((pcSyncStatus & CalendarFixerUtil.STATUS_MEET_ISSUE_PC_SYNC) == 0) {
+			Log.w(TAG, "pcSyncStatus is not 0");
+			return false;
+		}
+		
+		long mailDeploy = getMailDeployTime();
+		Set<Long> ids = accountIDs.keySet();
+		
+		HashMap<Long, String> idNamePair = getExistenceGoogleCalendarAccountIDAndNames(context.getContentResolver());
+		for (Long id : ids) {
+			byte status = CalendarFixerUtil.doCheckGoogleAccountCalendarEventStatus(context.getContentResolver(), id);
+			long cal_sync8 = accountIDs.get(id);
+			if (cal_sync8 < mailDeploy) {
+				Log.w(TAG, String.format("CAL_SYNC8 is %d, should be safe", id, Locale.US));
+				continue;
+			}
+			
+			if ((status & CalendarFixerUtil.STATUS_MEET_ISSUE_NO_EVENT) != 0) {
+				Log.w(TAG, String.format("Account %d meet issue, start fixing", id, Locale.US));
+				eraseGoogleCalendarSyncStatus(context, idNamePair.get(id), id);
+			}
+		}
+		
 		Toast.makeText(context, "Fix and sync triggered", Toast.LENGTH_SHORT).show();
 		return true;
 	}
